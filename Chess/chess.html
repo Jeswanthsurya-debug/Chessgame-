@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Chess</title>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background: #222;
+      font-family: sans-serif;
+      color: #eee;
+      gap: 16px;
+    }
+
+    .board {
+      display: grid;
+      grid-template-columns: repeat(8, 60px);
+      border: 3px solid #888;
+    }
+
+    .square {
+      width: 60px;
+      height: 60px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 36px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .white { background: #f0d9b5; }
+    .black { background: #b58863; }
+
+    .selected { outline: 4px solid #f6f624; outline-offset: -4px; }
+    .valid-move::after {
+      content: "";
+      width: 20px;
+      height: 20px;
+      background: rgba(0,0,0,0.25);
+      border-radius: 50%;
+      display: block;
+    }
+
+    #status {
+      font-size: 18px;
+      letter-spacing: 1px;
+      background: #333;
+      padding: 8px 20px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="status">White's Turn</div>
+<div class="board" id="board"></div>
+
+<script>
+const boardEl = document.getElementById("board");
+const statusEl = document.getElementById("status");
+
+let pieces = [
+  "♜","♞","♝","♛","♚","♝","♞","♜",
+  "♟","♟","♟","♟","♟","♟","♟","♟",
+  "","","","","","","","",
+  "","","","","","","","",
+  "","","","","","","","",
+  "","","","","","","","",
+  "♙","♙","♙","♙","♙","♙","♙","♙",
+  "♖","♘","♗","♕","♔","♗","♘","♖"
+];
+
+let selectedIndex = null;
+let currentPlayer = "white";
+
+function isWhite(p) { return "♙♖♘♗♕♔".includes(p); }
+function isBlack(p) { return "♟♜♞♝♛♚".includes(p); }
+
+function getRow(i) { return Math.floor(i / 8); }
+function getCol(i) { return i % 8; }
+
+function isPathClear(from, to, rowStep, colStep) {
+  let r = getRow(from) + rowStep;
+  let c = getCol(from) + colStep;
+  const tr = getRow(to), tc = getCol(to);
+  while (r !== tr || c !== tc) {
+    if (pieces[r * 8 + c] !== "") return false;
+    r += rowStep;
+    c += colStep;
+  }
+  return true;
+}
+
+function isValidMove(from, to) {
+  if (from === to) return false;
+  const piece = pieces[from];
+  const target = pieces[to];
+
+  const fr = getRow(from), fc = getCol(from);
+  const tr = getRow(to), tc = getCol(to);
+  const dr = tr - fr, dc = tc - fc;
+
+  // Cannot capture own piece
+  if (target && (
+    (isWhite(piece) && isWhite(target)) ||
+    (isBlack(piece) && isBlack(target))
+  )) return false;
+
+  // ♙ White Pawn
+  if (piece === "♙") {
+    if (dc === 0 && dr === -1 && !target) return true; // move forward
+    if (dc === 0 && dr === -2 && fr === 6 && !target && !pieces[from - 8]) return true; // first move
+    if (Math.abs(dc) === 1 && dr === -1 && target && isBlack(target)) return true; // capture diagonal
+    return false;
+  }
+
+  // ♟ Black Pawn
+  if (piece === "♟") {
+    if (dc === 0 && dr === 1 && !target) return true;
+    if (dc === 0 && dr === 2 && fr === 1 && !target && !pieces[from + 8]) return true;
+    if (Math.abs(dc) === 1 && dr === 1 && target && isWhite(target)) return true;
+    return false;
+  }
+
+  // ♜♖ Rook
+  if (piece === "♖" || piece === "♜") {
+    if (fr !== tr && fc !== tc) return false;
+    const rowStep = fr === tr ? 0 : (dr > 0 ? 1 : -1);
+    const colStep = fc === tc ? 0 : (dc > 0 ? 1 : -1);
+    return isPathClear(from, to, rowStep, colStep);
+  }
+
+  // ♗♝ Bishop
+  if (piece === "♗" || piece === "♝") {
+    if (Math.abs(dr) !== Math.abs(dc)) return false;
+    return isPathClear(from, to, dr > 0 ? 1 : -1, dc > 0 ? 1 : -1);
+  }
+
+  // ♕♛ Queen = Rook + Bishop
+  if (piece === "♕" || piece === "♛") {
+    if (fr === tr || fc === tc) {
+      const rowStep = fr === tr ? 0 : (dr > 0 ? 1 : -1);
+      const colStep = fc === tc ? 0 : (dc > 0 ? 1 : -1);
+      return isPathClear(from, to, rowStep, colStep);
+    }
+    if (Math.abs(dr) === Math.abs(dc)) {
+      return isPathClear(from, to, dr > 0 ? 1 : -1, dc > 0 ? 1 : -1);
+    }
+    return false;
+  }
+
+  // ♔♚ King
+  if (piece === "♔" || piece === "♚") {
+    return Math.abs(dr) <= 1 && Math.abs(dc) <= 1;
+  }
+
+  // ♘♞ Knight
+  if (piece === "♘" || piece === "♞") {
+    return (Math.abs(dr) === 2 && Math.abs(dc) === 1) ||
+           (Math.abs(dr) === 1 && Math.abs(dc) === 2);
+  }
+
+  return false;
+}
+
+function getValidMoves(from) {
+  const moves = [];
+  for (let i = 0; i < 64; i++) {
+    if (isValidMove(from, i)) moves.push(i);
+  }
+  return moves;
+}
+
+function renderBoard() {
+  boardEl.innerHTML = "";
+  const validMoves = selectedIndex !== null ? getValidMoves(selectedIndex) : [];
+
+  pieces.forEach((piece, i) => {
+    const square = document.createElement("div");
+    const isLight = (getRow(i) + getCol(i)) % 2 === 0;
+    square.className = "square " + (isLight ? "white" : "black");
+
+    if (i === selectedIndex) square.classList.add("selected");
+    if (validMoves.includes(i) && !piece) square.classList.add("valid-move");
+
+    square.textContent = piece;
+
+    square.addEventListener("click", () => {
+      // Clicking a valid move destination
+      if (selectedIndex !== null && isValidMove(selectedIndex, i)) {
+        const captured = pieces[i];
+        pieces[i] = pieces[selectedIndex];
+        pieces[selectedIndex] = "";
+        selectedIndex = null;
+        currentPlayer = currentPlayer === "white" ? "black" : "white";
+
+        // Check if a king was captured (simple win condition)
+        if (captured === "♔") { renderBoard(); statusEl.textContent = "♟ Black Wins!"; return; }
+        if (captured === "♚") { renderBoard(); statusEl.textContent = "♙ White Wins!"; return; }
+
+        statusEl.textContent = currentPlayer === "white" ? "White's Turn" : "Black's Turn";
+        renderBoard();
+        return;
+      }
+
+      // Selecting a piece
+      if (
+        piece !== "" &&
+        ((currentPlayer === "white" && isWhite(piece)) ||
+         (currentPlayer === "black" && isBlack(piece)))
+      ) {
+        selectedIndex = i;
+      } else {
+        selectedIndex = null; // deselect on bad click
+      }
+
+      renderBoard();
+    });
+
+    boardEl.appendChild(square);
+  });
+}
+
+renderBoard();
+</script>
+</body>
+</html>
